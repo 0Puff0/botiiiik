@@ -1,4 +1,7 @@
-aiogram>=3.4
+telethon>=1.36
+cryptg
 openai>=1.30
+httpx[socks]>=0.27
+python-socks[asyncio]
 pyyaml
 python-dotenv
