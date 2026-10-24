@@ -1,13 +1,13 @@
-# Telegram ID учеников, которым разрешён доступ
-# (ученик может узнать свой ID, написав боту — бот ответит "Нет доступа. Твой ID: ...")
+# Telegram IDs of students allowed to use the bot
+# (a student can find their ID by messaging the bot — it replies "Нет доступа. Твой ID: ...")
 allowed_users:
   - 123456789
   - 987654321
 
-# Сколько задач в день может получить один ученик
+# How many tasks one student can get per day
 daily_limit: 3
 
-# Какую нейросеть использовать: gemini (бесплатно, для тестов) или openai
+# LLM backend: gemini (free, for testing) or openai
 llm:
   provider: gemini
   gemini:
@@ -19,7 +19,7 @@ llm:
     base_url: null
     model: gpt-4o
 
-# Задачи: для каждого номера свой промт и свой список условий
+# Tasks: each number has its own grading prompt and its own list of problems
 tasks:
   17:
     prompt: |

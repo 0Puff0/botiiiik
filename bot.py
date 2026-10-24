@@ -15,25 +15,12 @@ from telethon import Button, TelegramClient, connection, events
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
+with open("config.yaml", encoding="utf-8") as f:
+    CFG = yaml.safe_load(f)
 
-# ---------- Configs ----------
-def load_yaml(path: str) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-PUB = load_yaml("config.public.yaml")
-PRIV = load_yaml("config.private.yaml")
-
-ALLOWED = set(PRIV["allowed_users"])
-DAILY_LIMIT = int(PUB["daily_limit"])
-MSG = PUB["messages"]
-PROMPTS = {str(k): v for k, v in PRIV["prompts"].items()}
-TASKS = {str(k): v for k, v in PUB["tasks"].items()}
-
-missing = [k for k in TASKS if k not in PROMPTS]
-if missing:
-    raise SystemExit(f"No prompt in config.private.yaml for tasks: {missing}")
+ALLOWED = set(CFG["allowed_users"])
+DAILY_LIMIT = int(CFG["daily_limit"])
+TASKS = {str(k): v for k, v in CFG["tasks"].items()}
 
 
 # ---------- Telegram transport (MTProto proxy / SOCKS5 / HTTP / none) ----------
@@ -95,8 +82,8 @@ client = TelegramClient(
 )
 
 # ---------- LLM (Gemini and OpenAI share one OpenAI-compatible client) ----------
-provider = PRIV["llm"]["provider"]
-pcfg = PRIV["llm"][provider]
+provider = CFG["llm"]["provider"]
+pcfg = CFG["llm"][provider]
 LLM_PROXY = os.getenv("LLM_PROXY", "").strip() or None
 llm = AsyncOpenAI(
     api_key=os.environ[pcfg["api_key_env"]],
@@ -141,7 +128,7 @@ def clear_pending(uid: int):
 
 # ---------- Helpers ----------
 def menu_kb():
-    return [[Button.inline(MSG["button"].format(key=k), data=f"task:{k}".encode()) for k in TASKS]]
+    return [[Button.inline(f"Задача {k}", data=f"task:{k}".encode()) for k in TASKS]]
 
 
 async def send_long(event, text: str):
@@ -154,7 +141,7 @@ async def send_long(event, text: str):
 async def on_message(event):
     uid = event.sender_id
     if uid not in ALLOWED:
-        await event.respond(MSG["no_access"].format(user_id=uid))
+        await event.respond(f"Нет доступа. Твой ID: {uid}")
         return
 
     text = (event.raw_text or "").strip()
@@ -166,21 +153,23 @@ async def on_message(event):
         await check_solution(event)
     elif text.startswith("/start"):
         left = DAILY_LIMIT - used_today(uid)
-        await event.respond(MSG["menu"].format(left=max(left, 0)), buttons=menu_kb())
+        await event.respond(
+            f"Выбери номер задачи. Осталось попыток сегодня: {max(left, 0)}", buttons=menu_kb()
+        )
     elif text.startswith("/skip"):
         clear_pending(uid)
-        await event.respond(MSG["skipped"], buttons=menu_kb())
+        await event.respond("Задача сброшена (попытка не возвращается). Выбери новую:", buttons=menu_kb())
     elif get_pending(uid):
-        await event.respond(MSG["send_photo"])
+        await event.respond("Пришли решение фотографией (или /skip).")
     else:
-        await event.respond(MSG["choose_first"], buttons=menu_kb())
+        await event.respond("Выбери задачу:", buttons=menu_kb())
 
 
 @client.on(events.CallbackQuery(pattern=rb"task:.*"))
 async def on_task_choice(event):
     uid = event.sender_id
     if uid not in ALLOWED:
-        await event.answer("No access", alert=True)
+        await event.answer("Нет доступа", alert=True)
         return
     await event.answer()
 
@@ -188,28 +177,28 @@ async def on_task_choice(event):
     if key not in TASKS:
         return
     if get_pending(uid):
-        await event.respond(MSG["finish_current_first"])
+        await event.respond("Сначала пришли фото решения текущей задачи (или /skip).")
         return
     if used_today(uid) >= DAILY_LIMIT:
-        await event.respond(MSG["limit_reached"].format(limit=DAILY_LIMIT))
+        await event.respond(f"Лимит на сегодня ({DAILY_LIMIT}) исчерпан. Приходи завтра!")
         return
 
     problem = random.choice(TASKS[key]["problems"])
     add_usage(uid)
     set_pending(uid, key, problem)
     left = DAILY_LIMIT - used_today(uid)
-    await event.respond(MSG["task"].format(key=key, problem=problem, left=left))
+    await event.respond(f"Задача {key}:\n\n{problem}\n\nПришли фото решения. Осталось попыток: {left}")
 
 
 async def check_solution(event):
     uid = event.sender_id
     pending = get_pending(uid)
     if not pending:
-        await event.respond(MSG["choose_first"], buttons=menu_kb())
+        await event.respond("Сначала выбери задачу:", buttons=menu_kb())
         return
     key, problem = pending
 
-    wait = await event.respond(MSG["checking"])
+    wait = await event.respond("Проверяю решение, подожди немного…")
     mime = "image/jpeg" if event.photo else event.document.mime_type
     data = await event.download_media(file=bytes)
     img_b64 = base64.b64encode(data).decode()
@@ -218,14 +207,11 @@ async def check_solution(event):
         resp = await llm.chat.completions.create(
             model=MODEL,
             messages=[
-                {"role": "system", "content": PROMPTS[key]},
+                {"role": "system", "content": TASKS[key]["prompt"]},
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "text",
-                            "text": f"Problem statement:\n{problem}\n\nBelow is a photo of the student's solution.",
-                        },
+                        {"type": "text", "text": f"Условие задачи:\n{problem}\n\nНиже фото решения ученика."},
                         {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
                     ],
                 },
@@ -234,7 +220,7 @@ async def check_solution(event):
         answer = resp.choices[0].message.content
     except Exception:
         logging.exception("LLM error")
-        await wait.edit(MSG["llm_error"])
+        await wait.edit("Ошибка при проверке. Отправь фото ещё раз.")
         return
 
     clear_pending(uid)
@@ -242,9 +228,9 @@ async def check_solution(event):
     await send_long(event, answer)
     left = DAILY_LIMIT - used_today(uid)
     if left > 0:
-        await event.respond(MSG["attempts_left"].format(left=left), buttons=menu_kb())
+        await event.respond(f"Осталось попыток сегодня: {left}", buttons=menu_kb())
     else:
-        await event.respond(MSG["done_today"])
+        await event.respond("На сегодня всё, приходи завтра!")
 
 
 async def main():
