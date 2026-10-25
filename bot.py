@@ -5,7 +5,7 @@ import random
 import sqlite3
 from datetime import date
 from urllib.parse import urlparse
-
+ 
 import httpx
 import yaml
 from dotenv import load_dotenv
