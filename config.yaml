@@ -3,6 +3,7 @@
 allowed_users:
   - 123456789
   - 987654321
+  - 471481560
 
 # How many tasks one student can get per day
 daily_limit: 3
