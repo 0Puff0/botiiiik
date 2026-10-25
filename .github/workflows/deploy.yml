@@ -14,7 +14,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd /home/puff/botiiiik
+            cd /root/botiiiik
             git pull origin main
             venv/bin/pip install -r requirements.txt
-            sudo systemctl restart botiiiik
+            systemctl restart botiiiik
+            sleep 5
+            systemctl is-active --quiet botiiiik
