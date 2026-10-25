@@ -5,3 +5,4 @@ httpx[socks]>=0.27
 python-socks[asyncio]
 pyyaml
 python-dotenv
+
