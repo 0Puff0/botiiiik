@@ -1,8 +1,7 @@
 # Telegram IDs of students allowed to use the bot
 # (a student can find their ID by messaging the bot — it replies "Нет доступа. Твой ID: ...")
 allowed_users:
-  - 123456789
-  - 987654321
+  - 471481560
 
 # How many tasks one student can get per day
 daily_limit: 3
