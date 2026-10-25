@@ -2,6 +2,7 @@
 # (a student can find their ID by messaging the bot — it replies "Нет доступа. Твой ID: ...")
 allowed_users:
   - 471481560
+  - 5522517431
 
 # How many tasks one student can get per day
 daily_limit: 3
